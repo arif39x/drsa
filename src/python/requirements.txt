@@ -1,0 +1,28 @@
+# DRSA Python Dependencies
+# Layer 3: Embedded ML Engine (PyO3 bridged from Rust)
+
+# ── Ingestion (VAULT) ──────────────────────────────────────
+docling>=2.0           # PDF extraction (primary)
+marker-pdf>=1.0        # PDF extraction (fallback)
+yt-dlp>=2024.1         # YouTube/video downloading
+openai-whisper>=20240930  # Audio transcription
+crawl4ai>=0.3          # Web scraping (primary)
+beautifulsoup4>=4.12   # Web scraping (fallback)
+requests>=2.32
+
+# ── Agentic Reasoning (BRAIN) ─────────────────────────────
+langgraph>=0.2         # LangGraph agent framework
+pydantic>=2.7
+pydantic-ai>=0.0.14    # PydanticAI structured agents
+
+# ── Hallucination Guard (BRAIN) ───────────────────────────
+ragas>=0.1.18          # Faithfulness + relevance scoring
+datasets>=2.20
+
+# ── Knowledge Graph (STUDIO) ──────────────────────────────
+gliner>=0.2.9          # Named entity recognition
+networkx>=3.3          # Graph data structure
+kuzu>=0.7              # Embedded graph database
+
+# ── LLM / Embeddings ─────────────────────────────────────
+sentence-transformers>=3.0   # Embedding model
