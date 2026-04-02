@@ -1,7 +1,9 @@
-# Tauri + Solid + Typescript
+# DRSA
 
-This template should help get you started developing with Tauri, Solid and Typescript in Vite.
-
-## Recommended IDE Setup
-
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+DRSA is tool i am building to study and research ...The features i am planing is
+1)Github Repo code Analysis
+2)Talk with Book document and text file
+3)Webscrap
+4)Pdf document making
+5)Diaggramically visulize the research..
+6)And a chatbot to talk about the research
