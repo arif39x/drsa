@@ -258,7 +258,7 @@ class DRSAUnifiedApp(App):
                         f"**Code Analyzer unavailable.**\n\n"
                         f"`{_DEP_STATUS.get('grammar', 'Grammar build failed.')}`"
                     )
-                elif "github.com" in query:
+                elif "github.com" in query or os.path.isdir(query):
                     status = self.code_analyzer.clone_and_index(query)
                     chat_output.update(f"**{status}**")
                 else:
@@ -291,9 +291,20 @@ class DRSAUnifiedApp(App):
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Switch the active research mode."""
         self.current_mode = event.item.id if event.item else "code_import"
+        mode_display = self.current_mode.replace("_", " ").title()
         self.query_one("#chat_output", Markdown).update(
-            f"Mode switched to: **{self.current_mode.replace('_', ' ').title()}**"
+            f"Mode switched to: **{mode_display}**"
         )
+
+        # Update input placeholder
+        input_widget = self.query_one("#chat_input", Input)
+        placeholders = {
+            "code_import": "Enter GitHub URL, local path, or code query...",
+            "doc_research": "Enter absolute path to PDF or document...",
+            "web_scrap": "Enter search query or URL...",
+            "studio": "Ask an expert research question...",
+        }
+        input_widget.placeholder = placeholders.get(self.current_mode, "Ask a question...")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle sidebar quick-action buttons."""

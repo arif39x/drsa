@@ -67,20 +67,26 @@ class DeepCodeAnalyzer:
         if not LLAMA_INDEX_AVAIL:
             return "[LlamaIndex not available. Run: pip install llama-index-core]"
 
-        repo_name = repo_url.split("/")[-1].replace(".git", "")
-        dest = os.path.join(target_dir, repo_name)
-
-        if os.path.exists(dest):
-            shutil.rmtree(dest)
-
-        Repo.clone_from(repo_url, dest)
+        # Check if it's a local directory
+        if os.path.isdir(repo_url):
+            dest = os.path.abspath(repo_url)
+            repo_name = os.path.basename(dest)
+            is_local = True
+        else:
+            repo_name = repo_url.split("/")[-1].replace(".git", "")
+            dest = os.path.join(target_dir, repo_name)
+            if os.path.exists(dest):
+                shutil.rmtree(dest)
+            Repo.clone_from(repo_url, dest)
+            is_local = False
 
         documents = SimpleDirectoryReader(dest, recursive=True).load_data()
         vector_store = LanceDBVectorStore(uri=self.db_uri, table_name="code_index")
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
         VectorStoreIndex.from_documents(documents, storage_context=storage_context)
 
-        return f"Successfully indexed {len(documents)} files from '{repo_name}'."
+        source_type = "local directory" if is_local else "remote repository"
+        return f"Successfully indexed {len(documents)} files from {source_type} '{repo_name}'."
 
     def analyze_structure(self, file_path: str) -> list:
 
