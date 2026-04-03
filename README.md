@@ -12,14 +12,14 @@
 
 ## Key Features
 
-| Feature               | Description                                                | Modes               |
-| :-------------------- | :--------------------------------------------------------- | :------------------ | ------------------------------- |
-| **Code Intelligence** | Deep indexing with LlamaIndex and Tree-Sitter.             | `Code Import`       | **Currently in Building phase** |
-| **Doc Analysis**      | High-fidelity parsing of PDFs and Office docs (Magic-PDF). | `Doc Research`      | **Currently in Building phase** |
-| **Web Research**      | AI-driven web scraping via Crawl4AI and SearXNG.           | `Web Scrap`         | **Working**                     |
-| **Expert Synthesis**  | Cyclic reasoning agents powered by LangGraph.              | `Studio Mode`       |
-| **Visual Graphs**     | Auto-generated Mermaid diagrams and Knowledge Graphs.      | Sidebar / Viz Panel |
-| **Notebook**          | Planning to Add                                            |
+| Feature | Description | Modes | Status |
+| :--- | :--- | :--- | :--- |
+| **Code Intelligence** | Deep indexing with LlamaIndex and Tree-Sitter. | `Code Import` | **Currently in Building phase** |
+| **Doc Analysis** | High-fidelity parsing of PDFs and Office docs (Magic-PDF). | `Doc Research` | **Currently in Building phase** |
+| **Web Research** | AI-driven web scraping via Crawl4AI and SearXNG. | `Web Scrap` | **Working** |
+| **Expert Synthesis** | Cyclic reasoning agents powered by LangGraph. | `Studio Mode` | **Active** |
+| **Visual Graphs** | Auto-generated Mermaid diagrams and Knowledge Graphs. | Sidebar / Viz Panel | **Active** |
+| **Notebook** | Dedicated research scratchpad and logging. | `Notebook` | *Planning to Add* |
 
 ### Local Directory Indexing
 
@@ -33,7 +33,7 @@ Also Local directory Codebase Scanning and asking question....
 | :--------- | :------------------------------------------ |
 | `CTRL + B` | Toggle Left Sidebar (Modes & Quick Actions) |
 | `CTRL + V` | Toggle Right Visualization Panel            |
-| `Q`        | ❌ Quit Application                         |
+| `Q`        |  Quit Application                         |
 | `ENTER`    | Submit Query / Load Path                    |
 
 ---
