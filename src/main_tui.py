@@ -1,26 +1,64 @@
-from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Header, Footer, Static, Input, Button, Markdown, ListItem, ListView
-from textual.binding import Binding
-from textual.reactive import reactive
+"""DRSA Unified TUI built with Textual — Command Center layout."""
+
 import os
+
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, Horizontal, Vertical
+from textual.reactive import reactive
+from textual.widgets import (
+    Button,
+    Footer,
+    Header,
+    Input,
+    ListItem,
+    ListView,
+    Markdown,
+    Static,
+)
 
 from src.features.github.analyzer import DeepCodeAnalyzer
 from src.features.research.visualizer import ResearchVisualizer
 from src.features.brain.orchestrator import build_orchestrator
+from src.features.brain.agentic_reasoning import run_agent
+
+# ---------------------------------------------------------------------------
+# Dependency availability tracking
+# ---------------------------------------------------------------------------
+_DEP_STATUS: dict[str, str | bool] = {}
 
 try:
     from src.features.research.scraper import ResearchScraper
-except ImportError:
-    ResearchScraper = None
+
+    _DEP_STATUS["scraper"] = True
+except ImportError as _e:
+    ResearchScraper = None  # type: ignore[assignment]
+    _DEP_STATUS["scraper"] = f"UNAVAIL: {_e}"
 
 try:
     from src.features.vault.parser import TechDocParser
-except ImportError:
-    TechDocParser = None
+
+    _DEP_STATUS["parser"] = True
+except ImportError as _e:
+    TechDocParser = None  # type: ignore[assignment]
+    _DEP_STATUS["parser"] = f"UNAVAIL: {_e}"
+
+
+def _dep_warnings() -> str:
+    """Return a newline-joined list of dependency warnings (if any)."""
+    lines = []
+    for name, status in _DEP_STATUS.items():
+        if status is not True:
+            lines.append(f"[yellow]WARN[/yellow] {name}: {status}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
 
 class DRSAUnifiedApp(App):
-    # unified TUI for deep research and code analysis.
+    """Unified TUI for deep research and code analysis."""
 
     CSS = """
     Screen {
@@ -56,6 +94,11 @@ class DRSAUnifiedApp(App):
         background: #1e293b;
         border: solid #334155;
         padding: 1;
+    }
+
+    .dep_warning {
+        color: #fbbf24;
+        margin-top: 1;
     }
 
     #main_container {
@@ -120,16 +163,37 @@ class DRSAUnifiedApp(App):
         Binding("ctrl+v", "toggle_viz", "Viz Panel"),
     ]
 
-    current_mode = reactive("code_import")
+    current_mode: reactive[str] = reactive("code_import")
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
 
     def on_mount(self) -> None:
-        self.code_analyzer = DeepCodeAnalyzer()
+        """Initialise backend components and show dependency status."""
+        try:
+            self.code_analyzer: DeepCodeAnalyzer | None = DeepCodeAnalyzer()
+        except RuntimeError as exc:
+            self.code_analyzer = None
+            _DEP_STATUS["grammar"] = str(exc)
+
         self.viz_engine = ResearchVisualizer()
         self.orchestrator = build_orchestrator()
         self.scraper = ResearchScraper() if ResearchScraper else None
         self.parser = TechDocParser() if TechDocParser else None
 
+        # Surface any dep warnings in the sidebar
+        warnings = _dep_warnings()
+        if warnings:
+            self.query_one("#dep_warnings", Static).update(warnings)
+            self.sub_title = "System warnings — check sidebar"
+
+    # ------------------------------------------------------------------
+    # Compose
+    # ------------------------------------------------------------------
+
     def compose(self) -> ComposeResult:
+        """Build the 3-column Command Center layout."""
         yield Header(show_clock=True)
         with Horizontal():
             with Vertical(id="sidebar"):
@@ -138,31 +202,38 @@ class DRSAUnifiedApp(App):
                     yield ListItem(Static("Code Import"), id="code_import")
                     yield ListItem(Static("Doc Research"), id="doc_research")
                     yield ListItem(Static("Web Scrap"), id="web_scrap")
-                yield Static("ACTIONS", classes="panel_title")
-                yield Button("Visualize Research", variant="primary", id="viz_btn")
-                yield Button("Convert to Doc", variant="success", id="convert_btn")
+                    yield ListItem(Static("Studio"), id="studio")
+                yield Static("QUICK ACTIONS", classes="panel_title")
+                yield Button("Visualize", variant="primary", id="viz_btn")
+                yield Button("Convert PDF", variant="success", id="convert_btn")
+                yield Button("Scan Vault", variant="warning", id="scan_btn")
+                yield Static("", id="dep_warnings", classes="dep_warning")
 
             with Container(id="main_container"):
                 with Vertical(id="chat_area"):
-                    yield Static("UNIFIED CHATBOT", classes="panel_title")
-                    yield Markdown("", id="chat_output")
+                    yield Static("MAIN RESEARCH CONSOLE", classes="panel_title")
+                    yield Markdown("Welcome to DRSA. Select a mode and ask a question.", id="chat_output")
                     yield Input(placeholder="Ask a question...", id="chat_input")
 
             with Vertical(id="viz_panel"):
                 yield Static("VISUALIZATION PANEL", classes="panel_title")
-                yield Static("---")
-                yield Static("Analysis Output", id="viz_content", classes="panel")
+                yield Static("Analysis output will appear here.", id="viz_content", classes="panel")
                 yield Markdown("", id="viz_md_output")
 
         yield Footer()
 
+    # ------------------------------------------------------------------
+    # Event Handlers
+    # ------------------------------------------------------------------
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        query = event.value
+        """Process a query from the chat input box."""
+        query = event.value.strip()
         if not query:
             return
 
         chat_output = self.query_one("#chat_output", Markdown)
-        chat_output.update(f"⏳ Processing query in **{self.current_mode}** mode...")
+        chat_output.update(f"Processing query in **{self.current_mode}** mode...")
         event.input.value = ""
 
         try:
@@ -170,15 +241,26 @@ class DRSAUnifiedApp(App):
                 if self.scraper:
                     results = await self.scraper.search_and_scrape(query)
                     summary = "## Web Research Results\n\n"
-                    summary += "\n\n".join([f"### {res['title']}\n{res['markdown'][:500]}..." for res in results])
+                    summary += "\n\n".join(
+                        [f"### {r['title']}\n{r['markdown'][:500]}..." for r in results]
+                    )
                     chat_output.update(summary)
                 else:
-                    chat_output.update("❌ `ResearchScraper` is not available.")
+                    status = _DEP_STATUS.get("scraper", "unknown error")
+                    chat_output.update(
+                        f"**ResearchScraper unavailable.**\n\n`{status}`\n\n"
+                        "Install crawl4ai: `pip install crawl4ai`"
+                    )
 
             elif self.current_mode == "code_import":
-                if "github.com" in query:
+                if self.code_analyzer is None:
+                    chat_output.update(
+                        f"**Code Analyzer unavailable.**\n\n"
+                        f"`{_DEP_STATUS.get('grammar', 'Grammar build failed.')}`"
+                    )
+                elif "github.com" in query:
                     status = self.code_analyzer.clone_and_index(query)
-                    chat_output.update(f"✅ {status}")
+                    chat_output.update(f"**{status}**")
                 else:
                     answer = self.code_analyzer.query(query)
                     chat_output.update(f"### Code Analysis\n\n{answer}")
@@ -190,33 +272,89 @@ class DRSAUnifiedApp(App):
                     else:
                         content = self.parser.parse_office_doc(query)
                     chat_output.update(f"### Document Content\n\n{content}")
+                elif not self.parser:
+                    status = _DEP_STATUS.get("parser", "unknown error")
+                    chat_output.update(
+                        f"**Document Parser unavailable.**\n\n`{status}`"
+                    )
                 else:
-                    chat_output.update(f"❌ Document not found at path: {query}")
+                    chat_output.update(f"**File not found:** `{query}`")
 
-        except Exception as e:
-            chat_output.update(f"❌ Error: {str(e)}")
+            elif self.current_mode == "studio":
+                chat_output.update(f"Synthesising expert report for: *{query}*...")
+                answer = run_agent(query, context="")
+                chat_output.update(f"### Studio Report\n\n{answer}")
 
-    def on_list_view_selected(self, event: ListView.Selected):
+        except Exception as exc:
+            chat_output.update(f"**Error:** `{exc}`")
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Switch the active research mode."""
         self.current_mode = event.item.id if event.item else "code_import"
-        self.query_one("#chat_output", Markdown).update(f"🔄 Mode switched to: **{self.current_mode}**")
+        self.query_one("#chat_output", Markdown).update(
+            f"Mode switched to: **{self.current_mode.replace('_', ' ').title()}**"
+        )
 
-    def on_button_pressed(self, event: Button.Pressed):
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle sidebar quick-action buttons."""
         if event.button.id == "viz_btn":
-            self.query_one("#viz_content").update("Generating visualization...")
-            # Example visualization rendering
-            mermaid_sample = "graph TD\nA[Research Query] --> B(Search)\nB --> C{Found?}\nC -->|Yes| D[Scrape]\nC -->|No| E[End]"
-            viz_output = self.viz_engine.render_mermaid_to_ansi(mermaid_sample)
-            self.query_one("#viz_md_output", Markdown).update(f"### Research Graph Synthesis\n\n```mermaid\n{mermaid_sample}\n```")
-            self.query_one("#viz_content").update(viz_output)
-
+            self._run_visualization()
         elif event.button.id == "convert_btn":
-            self.query_one("#chat_output", Markdown).update("📄 Converting research to technical document...")
+            self.query_one("#chat_output", Markdown).update("Converting research to document...")
+        elif event.button.id == "scan_btn":
+            self._run_vault_scan()
+
+    # ------------------------------------------------------------------
+    # Actions (key bindings)
+    # ------------------------------------------------------------------
 
     def action_toggle_sidebar(self) -> None:
+        """Toggle sidebar visibility."""
         self.query_one("#sidebar").toggle_class("hidden")
 
     def action_toggle_viz(self) -> None:
+        """Toggle visualization panel visibility."""
         self.query_one("#viz_panel").toggle_class("hidden")
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _run_visualization(self) -> None:
+        """Build and render a knowledge graph or Mermaid diagram."""
+        from src.features.studio.knowledge_graph import build_graph
+
+        viz_content = self.query_one("#viz_content", Static)
+        viz_md = self.query_one("#viz_md_output", Markdown)
+
+        viz_content.update("Building knowledge graph...")
+        sample_text = (
+            "Python and FastAPI are used together. "
+            "LanceDB stores vector embeddings. "
+            "LangGraph orchestrates agent nodes in Python."
+        )
+        graph = build_graph(sample_text)
+        ansi = self.viz_engine.render_knowledge_graph(graph)
+        viz_content.update(ansi)
+        viz_md.update(f"```mermaid\n{graph['mermaid']}\n```")
+
+    def _run_vault_scan(self) -> None:
+        """Scan the LanceDB vault and report table count."""
+        chat_output = self.query_one("#chat_output", Markdown)
+        try:
+            import lancedb
+
+            db = lancedb.connect("./lancedb_vault")
+            tables = db.table_names()
+            report = "### Vault Scan Results\n\n"
+            if tables:
+                report += "\n".join(f"- `{t}`" for t in tables)
+            else:
+                report += "_No tables found in vault._"
+            chat_output.update(report)
+        except Exception as exc:
+            chat_output.update(f"**Vault scan error:** `{exc}`")
+
 
 if __name__ == "__main__":
     DRSAUnifiedApp().run()

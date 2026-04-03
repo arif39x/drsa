@@ -1,7 +1,10 @@
 from typing import TypedDict, List
-from langgraph.graph import StateGraph, END
+
+from src.features.brain.agentic_reasoning import run_agent
+
 
 class ResearchState(TypedDict):
+
     query: str
     mode: str
     plan: List[str]
@@ -9,25 +12,43 @@ class ResearchState(TypedDict):
     results: List[str]
     current_step: int
 
-def plan_step(state: ResearchState):
-    # Generate a research plan based on the mode
-    state["plan"] = [f"Step 1: Analyze {state['query']} in {state['mode']} context", "Step 2: Retrieve hierarchical data", "Step 3: Synthesize report"]
+
+def plan_step(state: ResearchState) -> ResearchState:
+    """Generate a research plan based on the active mode."""
+    state["plan"] = [
+        f"Step 1: Analyse '{state['query']}' in {state['mode']} context",
+        "Step 2: Retrieve hierarchical data",
+        "Step 3: Synthesise expert report",
+    ]
     return state
 
-def analysis_step(state: ResearchState):
-    # Execute the current research step.
-    state["context"] = f"Contextual data for {state['query']}..."
+
+def analysis_step(state: ResearchState) -> ResearchState:
+    context = state.get("context", "")
+    synthesised = run_agent(state["query"], context)
+    state["context"] = synthesised
+    state["results"] = [synthesised]
     return state
+
 
 def build_orchestrator():
-    # Build the LangGraph state machine.
-    workflow = StateGraph(ResearchState)
+    try:
+        from langgraph.graph import StateGraph, END
 
-    workflow.add_node("planner", plan_step)
-    workflow.add_node("analyzer", analysis_step)
+        workflow = StateGraph(ResearchState)
+        workflow.add_node("planner", plan_step)
+        workflow.add_node("analyzer", analysis_step)
+        workflow.set_entry_point("planner")
+        workflow.add_edge("planner", "analyzer")
+        workflow.add_edge("analyzer", END)
+        return workflow.compile()
+    except ImportError:
+        # Return a minimal stub so the TUI can still instantiate
+        class _StubOrchestrator:
+            def invoke(self, state: dict) -> dict:
+                state["results"] = [
+                    "[LangGraph not installed. Run: pip install langgraph]"
+                ]
+                return state
 
-    workflow.set_entry_point("planner")
-    workflow.add_edge("planner", "analyzer")
-    workflow.add_edge("analyzer", END)
-
-    return workflow.compile()
+        return _StubOrchestrator()

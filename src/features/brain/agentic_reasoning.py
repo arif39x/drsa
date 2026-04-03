@@ -1,8 +1,8 @@
-from typing import TypedDict, Annotated
-import operator
+from typing import TypedDict
 
 
-class AgentState(TypedDict):
+class AgentState(TypedDict):          #State container for the LangGraph reasoning pipeline.
+
     query: str
     context: str
     plan: list[str]
@@ -14,35 +14,81 @@ def run_agent(query: str, context: str) -> str:
 
     try:
         from langgraph.graph import StateGraph, END
+
         graph = _build_graph()
-        result = graph.invoke({"query": query, "context": context, "plan": [], "search_results": [], "answer": ""})
+        initial: AgentState = {
+            "query": query,
+            "context": context,
+            "plan": [],
+            "search_results": [],
+            "answer": "",
+        }
+        result = graph.invoke(initial)
         return result["answer"]
     except ImportError:
         return _simple_chain(query, context)
 
 
-def _plan_node(state: AgentState) -> AgentState:
-    # Break the query into sub-tasks.
-    state["plan"] = [f"Step 1: Understand '{state['query']}'", "Step 2: Search relevant documents", "Step 3: Synthesize answer"]
+def _plan_node(state: AgentState) -> AgentState:       #Break the query into ordered sub-tasks.
+    state["plan"] = [
+        f"Step 1: Understand '{state['query']}'",
+        "Step 2: Search relevant documents",
+        "Step 3: Synthesize answer from context",
+    ]
     return state
 
 
 def _retrieve_node(state: AgentState) -> AgentState:
-    # Retrieve relevant chunks from context.
-    state["search_results"] = [state["context"]] if state["context"] else ["No context available."]
+    """Retrieve relevant chunks from the provided context."""
+    state["search_results"] = (
+        [state["context"]] if state["context"] else ["No context available."]
+    )
     return state
 
 
 def _synthesize_node(state: AgentState) -> AgentState:
-    #Generate final answer from retrieved context.
+
+    import os
+
     combined = "\n".join(state["search_results"])
-    state["answer"] = f"Based on the retrieved context:\n{combined}\n\nAnswer to '{state['query']}': (LLM synthesis pending)"
+    prompt = (
+        f"You are a technical research assistant.\n\n"
+        f"Context:\n{combined}\n\n"
+        f"Answer this question concisely and accurately:\n{state['query']}"
+    )
+
+    try:
+        if os.environ.get("GEMINI_API_KEY"):
+            from llama_index.llms.gemini import Gemini
+            llm = Gemini(model="models/gemini-1.5-flash")
+            state["answer"] = llm.complete(prompt).text.strip()
+        elif os.environ.get("OPENAI_API_KEY"):
+            from llama_index.llms.openai import OpenAI
+            llm = OpenAI(model="gpt-4o-mini")
+            state["answer"] = llm.complete(prompt).text.strip()
+        else:
+            state["answer"] = (
+                "[LLM unavailable: No API keys found (GEMINI_API_KEY or OPENAI_API_KEY)]\n\n"
+                f"Raw context retrieved:\n{combined}"
+            )
+    except ImportError as exc:
+        state["answer"] = (
+            f"[LLM unavailable: Missing dependency for the LLM ({exc})]\n\n"
+            f"Please run: pip install llama-index-llms-gemini llama-index-llms-openai\n\n"
+            f"Raw context retrieved:\n{combined}"
+        )
+    except Exception as exc:
+        state["answer"] = (
+            f"[LLM unavailable: {exc}]\n\n"
+            f"Raw context retrieved:\n{combined}"
+        )
+
     return state
 
 
 def _build_graph():
-    # Build and compile the LangGraph state machine.
     from langgraph.graph import StateGraph, END
+
     g = StateGraph(AgentState)
     g.add_node("plan", _plan_node)
     g.add_node("retrieve", _retrieve_node)
@@ -55,9 +101,8 @@ def _build_graph():
 
 
 def _simple_chain(query: str, context: str) -> str:
-    # Fallback when LangGraph is not installed.
     return (
         f"Query: {query}\n"
-        f"Context: {context[:500] if context else 'None'}\n"
-        "(Install LangGraph for full agentic reasoning: pip install langgraph)"
+        f"Context: {context[:500] if context else 'None'}\n\n"
+        "[Install LangGraph for full agentic reasoning: pip install langgraph]"
     )

@@ -2,7 +2,7 @@ from textual.widgets import Vertical, Static, Button
 from textual.containers import Container
 
 class VaultView(Vertical):
-    """Document Vault & RAG Interface."""
+    # Document Vault & RAG Interface.
     def compose(self):
         yield Static("Document Vault & RAG", classes="title")
         yield Static("Upload and index documents for deep research.", classes="panel")

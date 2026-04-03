@@ -6,6 +6,7 @@ pytermgui>=7.7.4
 llama-index-core
 llama-index-readers-file
 llama-index-llms-openai
+llama-index-llms-gemini
 llama-index-embeddings-openai
 langgraph>=0.2.0
 pydantic-ai>=1.0.0
