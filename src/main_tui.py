@@ -1,5 +1,3 @@
-"""DRSA Unified TUI built with Textual — Command Center layout."""
-
 import os
 
 from textual.app import App, ComposeResult
@@ -22,9 +20,11 @@ from src.features.research.visualizer import ResearchVisualizer
 from src.features.brain.orchestrator import build_orchestrator
 from src.features.brain.agentic_reasoning import run_agent
 
-# ---------------------------------------------------------------------------
-# Dependency availability tracking
-# ---------------------------------------------------------------------------
+from src.ui.mode_1 import Mode1CodeIntelligence
+from src.ui.mode_2 import Mode2DocumentVault
+from src.ui.mode_3 import Mode3StudioResearch
+from textual.widgets import Label
+
 _DEP_STATUS: dict[str, str | bool] = {}
 
 try:
@@ -40,25 +40,18 @@ try:
 
     _DEP_STATUS["parser"] = True
 except ImportError as _e:
-    TechDocParser = None  # type: ignore[assignment]
+    TechDocParser = None
     _DEP_STATUS["parser"] = f"UNAVAIL: {_e}"
 
 
 def _dep_warnings() -> str:
-    """Return a newline-joined list of dependency warnings (if any)."""
     lines = []
     for name, status in _DEP_STATUS.items():
         if status is not True:
             lines.append(f"[yellow]WARN[/yellow] {name}: {status}")
     return "\n".join(lines)
 
-
-# ---------------------------------------------------------------------------
-# Application
-# ---------------------------------------------------------------------------
-
 class DRSAUnifiedApp(App):
-    """Unified TUI for deep research and code analysis."""
 
     CSS = """
     Screen {
@@ -155,6 +148,14 @@ class DRSAUnifiedApp(App):
         width: 100%;
         margin-bottom: 1;
     }
+
+    #status_spinner {
+        dock: bottom;
+        background: #1e293b;
+        color: #fbbf24;
+        padding-right: 2;
+        text-align: right;
+    }
     """
 
     BINDINGS = [
@@ -165,12 +166,8 @@ class DRSAUnifiedApp(App):
 
     current_mode: reactive[str] = reactive("code_import")
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
 
     def on_mount(self) -> None:
-        """Initialise backend components and show dependency status."""
         try:
             self.code_analyzer: DeepCodeAnalyzer | None = DeepCodeAnalyzer()
         except RuntimeError as exc:
@@ -188,12 +185,7 @@ class DRSAUnifiedApp(App):
             self.query_one("#dep_warnings", Static).update(warnings)
             self.sub_title = "System warnings — check sidebar"
 
-    # ------------------------------------------------------------------
-    # Compose
-    # ------------------------------------------------------------------
-
     def compose(self) -> ComposeResult:
-        """Build the 3-column Command Center layout."""
         yield Header(show_clock=True)
         with Horizontal():
             with Vertical(id="sidebar"):
@@ -221,13 +213,10 @@ class DRSAUnifiedApp(App):
                 yield Markdown("", id="viz_md_output")
 
         yield Footer()
+        yield Label("Status: Idle", id="status_spinner")
 
-    # ------------------------------------------------------------------
-    # Event Handlers
-    # ------------------------------------------------------------------
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Process a query from the chat input box."""
         query = event.value.strip()
         if not query:
             return
@@ -281,15 +270,17 @@ class DRSAUnifiedApp(App):
                     chat_output.update(f"**File not found:** `{query}`")
 
             elif self.current_mode == "studio":
+                spinner = self.query_one("#status_spinner", Label)
+                spinner.update("Status: [Planning -> Searching -> Synthesizing]")
                 chat_output.update(f"Synthesising expert report for: *{query}*...")
                 answer = run_agent(query, context="")
                 chat_output.update(f"### Studio Report\n\n{answer}")
+                spinner.update("Status: Idle")
 
         except Exception as exc:
             chat_output.update(f"**Error:** `{exc}`")
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Switch the active research mode."""
         self.current_mode = event.item.id if event.item else "code_import"
         mode_display = self.current_mode.replace("_", " ").title()
         self.query_one("#chat_output", Markdown).update(
@@ -307,7 +298,6 @@ class DRSAUnifiedApp(App):
         input_widget.placeholder = placeholders.get(self.current_mode, "Ask a question...")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle sidebar quick-action buttons."""
         if event.button.id == "viz_btn":
             self._run_visualization()
         elif event.button.id == "convert_btn":
@@ -315,25 +305,19 @@ class DRSAUnifiedApp(App):
         elif event.button.id == "scan_btn":
             self._run_vault_scan()
 
-    # ------------------------------------------------------------------
-    # Actions (key bindings)
-    # ------------------------------------------------------------------
-
     def action_toggle_sidebar(self) -> None:
-        """Toggle sidebar visibility."""
+
         self.query_one("#sidebar").toggle_class("hidden")
 
     def action_toggle_viz(self) -> None:
-        """Toggle visualization panel visibility."""
         self.query_one("#viz_panel").toggle_class("hidden")
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
+
 
     def _run_visualization(self) -> None:
         """Build and render a knowledge graph or Mermaid diagram."""
         from src.features.studio.knowledge_graph import build_graph
+        import shutil
 
         viz_content = self.query_one("#viz_content", Static)
         viz_md = self.query_one("#viz_md_output", Markdown)
@@ -345,9 +329,22 @@ class DRSAUnifiedApp(App):
             "LangGraph orchestrates agent nodes in Python."
         )
         graph = build_graph(sample_text)
-        ansi = self.viz_engine.render_knowledge_graph(graph)
-        viz_content.update(ansi)
-        viz_md.update(f"```mermaid\n{graph['mermaid']}\n```")
+
+        # Check if chafa is installed on the system (or mermaid fallback)
+        if shutil.which("chafa"):
+            try:
+                ansi = self.viz_engine.render_knowledge_graph(graph)
+                viz_content.update(ansi)
+                viz_content.styles.display = "block"
+                viz_md.styles.display = "none"
+            except Exception as e:
+                viz_content.styles.display = "none"
+                viz_md.styles.display = "block"
+                viz_md.update(f"```mermaid\\n{graph['mermaid']}\\n```")
+        else:
+            viz_content.styles.display = "none"
+            viz_md.styles.display = "block"
+            viz_md.update(f"```mermaid\\n{graph['mermaid']}\\n```")
 
     def _run_vault_scan(self) -> None:
         """Scan the LanceDB vault and report table count."""

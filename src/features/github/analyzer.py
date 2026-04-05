@@ -1,4 +1,4 @@
-import ctypes      #Deep codebase analyser using LlamaIndex and Tree-Sitter."
+import ctypes  # Deep codebase analyser using LlamaIndex and Tree-Sitter."
 import os
 import shutil
 import subprocess
@@ -8,7 +8,7 @@ from git import Repo
 from tree_sitter import Language, Parser
 
 try:
-    from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext
+    from llama_index.core import SimpleDirectoryReader, StorageContext, VectorStoreIndex
     from llama_index.vector_stores.lancedb import LanceDBVectorStore
 
     LLAMA_INDEX_AVAIL = True
@@ -41,16 +41,8 @@ def _ensure_grammars() -> None:
 
 
 class DeepCodeAnalyzer:
-
     def __init__(self, db_uri: str = "./lancedb_vault") -> None:
-        """Initialise the analyser, auto-building grammars if needed.
 
-        Args:
-            db_uri: Path to the LanceDB vault directory.
-
-        Raises:
-            RuntimeError: If grammar compilation fails and cannot be recovered.
-        """
         self.db_uri = db_uri
         self.db = lancedb.connect(db_uri)
 
@@ -95,7 +87,35 @@ class DeepCodeAnalyzer:
             return self._walk_tree(tree.root_node)
 
     def _walk_tree(self, node) -> list:
-        return []
+        results = []
+
+        def traverse(n):
+            if n.type == "function_definition":
+                name_idx = n.child_by_field_name("name")
+                params_idx = n.child_by_field_name("parameters")
+                name = name_idx.text.decode("utf-8") if name_idx else "unknown"
+                params = params_idx.text.decode("utf-8") if params_idx else ""
+                results.append({"type": "function", "name": name, "parameters": params})
+            elif n.type == "class_definition":
+                name_idx = n.child_by_field_name("name")
+                super_classes_idx = n.child_by_field_name("superclasses")
+                name = name_idx.text.decode("utf-8") if name_idx else "unknown"
+                supers = (
+                    super_classes_idx.text.decode("utf-8") if super_classes_idx else ""
+                )
+                results.append({"type": "class", "name": name, "inheritance": supers})
+            elif n.type == "import_statement":
+                results.append({"type": "import", "statement": n.text.decode("utf-8")})
+            elif n.type == "import_from_statement":
+                results.append(
+                    {"type": "import_from", "statement": n.text.decode("utf-8")}
+                )
+
+            for child in n.children:
+                traverse(child)
+
+        traverse(node)
+        return results
 
     def query(self, query_text: str) -> str:
 

@@ -5,14 +5,11 @@ import threading
 import httpx
 import pytermgui as ptg
 
+from src.features.brain.agentic_reasoning import run_agent
+from src.features.brain.orchestrator import build_orchestrator
 from src.features.github.analyzer import DeepCodeAnalyzer
 from src.features.research.visualizer import ResearchVisualizer
-from src.features.brain.orchestrator import build_orchestrator
-from src.features.brain.agentic_reasoning import run_agent
 
-# ---------------------------------------------------------------------------
-# Dependency availability tracking
-# ---------------------------------------------------------------------------
 _DEP_STATUS: dict[str, str | bool] = {}
 
 try:
@@ -20,7 +17,7 @@ try:
 
     _DEP_STATUS["scraper"] = True
 except ImportError as _e:
-    ResearchScraper = None  # type: ignore[assignment]
+    ResearchScraper = None
     _DEP_STATUS["scraper"] = f"UNAVAIL: {_e}"
 
 try:
@@ -28,12 +25,11 @@ try:
 
     _DEP_STATUS["parser"] = True
 except ImportError as _e:
-    TechDocParser = None  # type: ignore[assignment]
+    TechDocParser = None
     _DEP_STATUS["parser"] = f"UNAVAIL: {_e}"
 
 
 def _dep_summary() -> str:
-    """Return a compact dep-status string for the footer."""
     ok = [k for k, v in _DEP_STATUS.items() if v is True]
     bad = [k for k, v in _DEP_STATUS.items() if v is not True]
     parts = []
@@ -44,15 +40,8 @@ def _dep_summary() -> str:
     return " | ".join(parts) if parts else "all OK"
 
 
-# ---------------------------------------------------------------------------
-# Application
-# ---------------------------------------------------------------------------
-
 class DRSAUnifiedAppPTG:
-    """DRSA Command Center TUI implemented with PyTermGUI."""
-
     def __init__(self) -> None:
-        """Initialise backend components and the async event loop."""
         self.viz_engine = ResearchVisualizer()
         self.orchestrator = build_orchestrator()
 
@@ -70,7 +59,6 @@ class DRSAUnifiedAppPTG:
         self.header_label: ptg.Label | None = None
         self.footer_content: ptg.Label | None = None
 
-        # Background async loop for coroutines
         self.loop = asyncio.new_event_loop()
         bg = threading.Thread(
             target=lambda: (
@@ -81,12 +69,7 @@ class DRSAUnifiedAppPTG:
         )
         bg.start()
 
-    # ------------------------------------------------------------------
-    # Window builders
-    # ------------------------------------------------------------------
-
     def _setup_header(self) -> ptg.Window:
-        """Build the header window showing the active mode."""
         self.header_label = ptg.Label(
             f"[ptg.bold]DRSA[/ptg.bold]  |  MODE: [6]{self.current_mode.upper()}[/]",
             parent_align=0,
@@ -96,7 +79,6 @@ class DRSAUnifiedAppPTG:
         return win
 
     def _setup_footer(self) -> ptg.Window:
-        """Build the footer with hotkeys and live status indicators."""
         initial_status = (
             f"Q: Quit | CTRL+B: Sidebar | CTRL+V: Viz"
             f" | DEPS: {_dep_summary()}"
@@ -109,7 +91,6 @@ class DRSAUnifiedAppPTG:
         return win
 
     def _setup_sidebar(self) -> ptg.Window:
-        """Build the sidebar with mode selectors and quick-action buttons."""
 
         def set_mode(mode_name: str) -> None:
             self.current_mode = mode_name
@@ -152,9 +133,7 @@ class DRSAUnifiedAppPTG:
             if key == ptg.keys.RETURN:
                 query = self.chat_input.value
                 self.chat_input.value = ""
-                asyncio.run_coroutine_threadsafe(
-                    self._process_query(query), self.loop
-                )
+                asyncio.run_coroutine_threadsafe(self._process_query(query), self.loop)
                 return True
             return original_handle(key)
 
@@ -172,7 +151,9 @@ class DRSAUnifiedAppPTG:
 
     def _setup_viz(self) -> ptg.Window:
         """Build the right-hand visualization panel."""
-        self.viz_content = ptg.Label("Analysis output will appear here.", parent_align=0)
+        self.viz_content = ptg.Label(
+            "Analysis output will appear here.", parent_align=0
+        )
         self.viz_md = ptg.Label("", parent_align=0)
 
         win = ptg.Window(
@@ -184,10 +165,6 @@ class DRSAUnifiedAppPTG:
         )
         win.set_title("[ptg.bold]VIZ PANEL")
         return win
-
-    # ------------------------------------------------------------------
-    # Async tasks
-    # ------------------------------------------------------------------
 
     async def _update_status_bar_loop(self) -> None:
         """Periodically probe SearXNG and LanceDB, updating the footer."""
@@ -280,10 +257,6 @@ class DRSAUnifiedAppPTG:
         except Exception as exc:
             self.chat_output.set_text(f"[1]Error:[/] {exc}")
 
-    # ------------------------------------------------------------------
-    # Button handlers
-    # ------------------------------------------------------------------
-
     def _on_viz_pressed(self, *args) -> None:
         """Build a knowledge graph and render it in the Viz Panel."""
         from src.features.studio.knowledge_graph import build_graph
@@ -314,20 +287,12 @@ class DRSAUnifiedAppPTG:
         except Exception as exc:
             self.chat_output.set_text(f"[1]Vault scan error:[/] {exc}")
 
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
-
     def _update_header(self) -> None:
         """Refresh header label with the current mode name."""
         if self.header_label:
             self.header_label.set_text(
                 f"[ptg.bold]DRSA[/ptg.bold]  |  MODE: [6]{self.current_mode.upper()}[/]"
             )
-
-    # ------------------------------------------------------------------
-    # Entry point
-    # ------------------------------------------------------------------
 
     def run(self) -> None:
         """Launch the PyTermGUI window manager and render the layout."""
@@ -366,9 +331,7 @@ class DRSAUnifiedAppPTG:
             manager.bind("ctrl-b", lambda *_: sidebar.toggle_visibility())
             manager.bind("ctrl-v", lambda *_: self.viz.toggle_visibility())
 
-            asyncio.run_coroutine_threadsafe(
-                self._update_status_bar_loop(), self.loop
-            )
+            asyncio.run_coroutine_threadsafe(self._update_status_bar_loop(), self.loop)
             manager.run()
 
 

@@ -8,8 +8,18 @@ class TechDocParser:
         pass
 
     def parse_technical_pdf(self, pdf_path):
-        # Parse PDF using Magic-PDF to preserve LaTeX formulas.
-        return f"Parsed technical Markdown from {pdf_path} (LaTeX intact)"
+        try:
+            from marker.convert import convert_single_pdf
+            # Parse PDF using marker-pdf to preserve LaTeX formulas and tables.
+            text, _, _ = convert_single_pdf(str(pdf_path), None, None)
+            return text
+        except ImportError:
+            try:
+                import fitz  # PyMuPDF
+                doc = fitz.open(pdf_path)
+                return "\\n".join(page.get_text() for page in doc)
+            except ImportError:
+                return "Failed: marker-pdf and PyMuPDF are not installed."
 
     def parse_office_doc(self, doc_path):
         try:

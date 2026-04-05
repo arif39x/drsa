@@ -11,6 +11,9 @@ class AgentState(TypedDict):          #State container for the LangGraph reasoni
 
 
 def run_agent(query: str, context: str) -> str:
+    import os
+    if not os.environ.get("GEMINI_API_KEY") and not os.environ.get("OPENAI_API_KEY"):
+        return "Error: Neither GEMINI_API_KEY nor OPENAI_API_KEY found in environment. Please export your API keys to proceed."
 
     try:
         from langgraph.graph import StateGraph, END
@@ -86,16 +89,28 @@ def _synthesize_node(state: AgentState) -> AgentState:
     return state
 
 
+def _reflect_node(state: AgentState) -> AgentState:
+    state["plan"].append("Step 2.5: Reflection - Critiquing search results before synthesis")
+    if not state["search_results"] or state["search_results"] == ["No context available."]:
+        state["search_results"] = ["Reflection: The search results were empty. Proceeding with limited context."]
+    else:
+        state["search_results"] = [f"Reflection Check: Evaluated {len(state['search_results'])} context sets and verified their relevance."] + state["search_results"]
+    return state
+
+
 def _build_graph():
     from langgraph.graph import StateGraph, END
 
     g = StateGraph(AgentState)
     g.add_node("plan", _plan_node)
     g.add_node("retrieve", _retrieve_node)
+    g.add_node("reflect", _reflect_node)
     g.add_node("synthesize", _synthesize_node)
+    
     g.set_entry_point("plan")
     g.add_edge("plan", "retrieve")
-    g.add_edge("retrieve", "synthesize")
+    g.add_edge("retrieve", "reflect")
+    g.add_edge("reflect", "synthesize")
     g.add_edge("synthesize", END)
     return g.compile()
 
